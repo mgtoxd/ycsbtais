@@ -23,6 +23,7 @@ import site.ycsb.generator.UniformLongGenerator;
 import site.ycsb.measurements.Measurements;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.*;
 
 /**
@@ -414,6 +415,8 @@ public class CoreWorkload extends Workload {
     return fieldlengthgenerator;
   }
 
+  private static Zifp_gen z1;
+
   /**
    * Initialize the scenario.
    * Called once, in the main client thread, before any operations are started.
@@ -422,6 +425,7 @@ public class CoreWorkload extends Workload {
   public void init(Properties p) throws WorkloadException {
     table = p.getProperty(TABLENAME_PROPERTY, TABLENAME_PROPERTY_DEFAULT);
 
+//    System.out.println(z1);
     fieldcount =
         Long.parseLong(p.getProperty(FIELD_COUNT_PROPERTY, FIELD_COUNT_PROPERTY_DEFAULT));
     final String fieldnameprefix = p.getProperty(FIELD_NAME_PREFIX, FIELD_NAME_PREFIX_DEFAULT);
@@ -515,7 +519,9 @@ public class CoreWorkload extends Workload {
           p.getProperty(INSERT_PROPORTION_PROPERTY, INSERT_PROPORTION_PROPERTY_DEFAULT));
       int opcount = Integer.parseInt(p.getProperty(Client.OPERATION_COUNT_PROPERTY));
       int expectednewkeys = (int) ((opcount) * insertproportion * 2.0); // 2 is fudge factor
-
+      System.out.println(insertstart);
+      System.out.println(insertstart + insertcount + expectednewkeys);
+      System.out.println("zipf");
       keychooser = new ScrambledZipfianGenerator(insertstart, insertstart + insertcount + expectednewkeys);
     } else if (requestdistrib.compareTo("latest") == 0) {
       keychooser = new SkewedLatestGenerator(transactioninsertkeysequence);
@@ -540,7 +546,7 @@ public class CoreWorkload extends Workload {
       throw new WorkloadException(
           "Distribution \"" + scanlengthdistrib + "\" not allowed for scan length");
     }
-
+    z1= new Zifp_gen((int) recordcount, 1.0);
     insertionRetryLimit = Integer.parseInt(p.getProperty(
         INSERTION_RETRY_LIMIT, INSERTION_RETRY_LIMIT_DEFAULT));
     insertionRetryInterval = Integer.parseInt(p.getProperty(
@@ -611,6 +617,7 @@ public class CoreWorkload extends Workload {
    */
   @Override
   public boolean doInsert(DB db, Object threadstate) {
+    System.out.println("doInsert");
     int keynum = keysequence.nextValue().intValue();
     String dbkey = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
     HashMap<String, ByteIterator> values = buildValues(dbkey);
@@ -716,17 +723,60 @@ public class CoreWorkload extends Workload {
         keynum = keychooser.nextValue().intValue();
       } while (keynum > transactioninsertkeysequence.lastValue());
     }
+
+
+
     return keynum;
+  }
+  static class Zifp_gen implements Serializable {
+    private Random random = new Random(0);
+    NavigableMap<Double, Integer> map;
+    private static final double Constant = 1.0;
+
+    public  Zifp_gen(int nums, double skewness) {
+      // create the TreeMap
+      map = computeMap(nums, skewness);
+    }
+    //size为rank个数，skew为数据倾斜程度, 取值为0表示数据无倾斜，取值越大倾斜程度越高
+    private NavigableMap<Double, Integer> computeMap(
+        int size, double skew) {
+      NavigableMap<Double, Integer> map =
+          new TreeMap<Double, Integer>();
+      //总频率
+      double div = 0;
+      //对每个rank，计算对应的词频，计算总词频
+      for (int i = 1; i <= size; i++) {
+        //the frequency in position i
+        div += (Constant / Math.pow(i, skew));
+      }
+      //计算每个rank对应的y值，所以靠前rank的y值区间远比后面rank的y值区间大
+      double sum = 0;
+      for (int i = 1; i <= size; i++) {
+        double p = (Constant / Math.pow(i, skew)) / div;
+        sum += p;
+        map.put(sum, i - 1);
+      }
+      return map;
+    }
+
+    public int next() {
+        double value = random.nextDouble();
+        //找最近y值对应的rank
+        return map.ceilingEntry(value).getValue() + 1;
+    }
+
+  }
+
+  private String nextKey(){
+    return String.valueOf(z1.next());
   }
 
   public void doTransactionRead(DB db) {
     // choose a random key
-    long keynum = nextKeynum();
-
-    String keyname = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
-
+//    String keyname = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
+    String keyname = nextKey();
+    System.out.println(keyname);
     HashSet<String> fields = null;
-
     if (!readallfields) {
       // read a random field
       String fieldname = fieldnames.get(fieldchooser.nextValue().intValue());
@@ -749,7 +799,7 @@ public class CoreWorkload extends Workload {
   public void doTransactionReadModifyWrite(DB db) {
     // choose a random key
     long keynum = nextKeynum();
-
+    System.out.println("doTransactionReadModifyWrite");
     String keyname = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
 
     HashSet<String> fields = null;
@@ -796,7 +846,7 @@ public class CoreWorkload extends Workload {
   public void doTransactionScan(DB db) {
     // choose a random key
     long keynum = nextKeynum();
-
+    System.out.println("doTransactionScan");
     String startkeyname = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
 
     // choose a random scan length
@@ -818,7 +868,7 @@ public class CoreWorkload extends Workload {
   public void doTransactionUpdate(DB db) {
     // choose a random key
     long keynum = nextKeynum();
-
+    System.out.println("doTransactionUpdate");
     String keyname = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
 
     HashMap<String, ByteIterator> values;
@@ -837,7 +887,7 @@ public class CoreWorkload extends Workload {
   public void doTransactionInsert(DB db) {
     // choose the next key
     long keynum = transactioninsertkeysequence.nextValue();
-
+    System.out.println("doTransactionInsert");
     try {
       String dbkey = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
 
