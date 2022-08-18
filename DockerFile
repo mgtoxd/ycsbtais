@@ -1,0 +1,2 @@
+FROM 2359971480/ycsbbase:ycsbbase
+COPY ./ /YCSB

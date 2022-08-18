@@ -775,7 +775,7 @@ public class CoreWorkload extends Workload {
     // choose a random key
 //    String keyname = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
     String keyname = nextKey();
-    System.out.println(keyname);
+//    System.out.println(keyname);
     HashSet<String> fields = null;
     if (!readallfields) {
       // read a random field
